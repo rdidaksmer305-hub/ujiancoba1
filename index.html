@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Jam Tayang Helper</title>
+    <style>
+        :root { --red: #ff0000; --bg: #0a0a0a; --card: #181818; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: white; margin: 0; padding: 20px; }
+        .grid-layout { display: grid; grid-template-columns: 350px 1fr 300px; gap: 20px; max-width: 1400px; margin: auto; }
+        
+        /* Player Box */
+        .player-container { display: flex; flex-direction: column; align-items: center; background: #000; padding: 15px; border-radius: 15px; border: 1px solid #333; }
+        #player { border-radius: 10px; box-shadow: 0 0 50px rgba(255,0,0,0.1); }
+        .shorts-mode { width: 340px; height: 600px; }
+
+        /* Sidebar & Inputs */
+        .panel { background: var(--card); padding: 20px; border-radius: 15px; height: fit-content; }
+        textarea { width: 100%; height: 120px; background: #252525; color: white; border: 1px solid #444; border-radius: 8px; padding: 10px; margin-bottom: 10px; resize: none; }
+        
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 10px; transition: 0.3s; }
+        .btn-start { background: var(--red); color: white; }
+        .btn-check { display: none; background: #00ff00; color: black; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100; width: 200px; height: 100px; font-size: 20px; }
+
+        .recommendation-box { background: #222; padding: 15px; border-radius: 8px; border-left: 4px solid var(--red); font-style: italic; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+<button id="humanCheck" class="btn btn-check" onclick="verifyHuman()">SAYA MASIH NONTON</button>
+
+<div class="grid-layout">
+    <div class="panel">
+        <h3>Playlist Settings</h3>
+        <label>List Link (Video/Shorts):</label>
+        <textarea id="vLinks" placeholder="Satu link per baris..."></textarea>
+        
+        <label>Rekomendasi / Judul:</label>
+        <textarea id="vRecs" placeholder="Catatan untuk video ini..."></textarea>
+        
+        <button class="btn btn-start" onclick="startApp()">▶ JALANKAN PLAYER</button>
+        <div id="statusInfo" style="font-size: 12px; color: #888; margin-top: 10px;">Status: Standby</div>
+    </div>
+
+    <div class="player-container">
+        <div id="player" class="shorts-mode"></div>
+        <div style="margin-top: 10px; display:flex; gap: 10px;">
+            <button class="btn" style="background:#333; color:white" onclick="prev()">⏮</button>
+            <button class="btn" style="background:#333; color:white" onclick="next()">⏭</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h4>Rekomendasi Tayangan</h4>
+        <div id="currentRec" class="recommendation-box">Rekomendasi akan muncul di sini sesuai video yang diputar.</div>
+        <hr style="border:0.5px solid #333; margin: 20px 0;">
+        <div id="log">
+            <p style="font-size: 11px; color: #666;">*Tips: Gunakan volume 5-10% (jangan di-mute) agar jam tayang terhitung maksimal.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    let player;
+    let videoQueue = [];
+    let recsQueue = [];
+    let currentIdx = 0;
+    let videosWatchedSinceCheck = 0;
+
+    // Load API
+    let tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+
+    function extractId(url) {
+        let match = url.trim().match(/(shorts\/|v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+        return (match) ? match[2] : null;
+    }
+
+    function startApp() {
+        videoQueue = document.getElementById('vLinks').value.split('\n').map(l => extractId(l)).filter(id => id);
+        recsQueue = document.getElementById('vRecs').value.split('\n').filter(r => r.trim());
+
+        if (videoQueue.length === 0) return alert("Link video kosong!");
+        currentIdx = 0;
+        videosWatchedSinceCheck = 0;
+        loadPlayer(videoQueue[currentIdx]);
+    }
+
+    function loadPlayer(id) {
+        if (!player) {
+            player = new YT.Player('player', {
+                height: '100%', width: '100%', videoId: id,
+                playerVars: { 
+                    'autoplay': 1, 'controls': 1, 'rel': 0, 'mute': 0,
+                    'origin': window.location.origin, 'enablejsapi': 1
+                },
+                events: { 'onStateChange': onPlayerStateChange, 'onReady': (e) => e.target.playVideo() }
+            });
+        } else {
+            player.loadVideoById(id);
+        }
+        updateUI();
+    }
+
+    function onPlayerStateChange(event) {
+        if (event.data === YT.PlayerState.ENDED) {
+            videosWatchedSinceCheck++;
+            if (videosWatchedSinceCheck >= 5) {
+                document.getElementById('humanCheck').style.display = 'block';
+                document.getElementById('statusInfo').innerText = "Status: Menunggu Verifikasi Manusia...";
+            } else {
+                // Beri jeda acak 2-5 detik agar terlihat manusiawi
+                setTimeout(next, Math.floor(Math.random() * 3000) + 2000);
+            }
+        }
+    }
+
+    function verifyHuman() {
+        document.getElementById('humanCheck').style.display = 'none';
+        videosWatchedSinceCheck = 0;
+        next();
+    }
+
+    function next() {
+        if (currentIdx < videoQueue.length - 1) {
+            currentIdx++;
+            loadPlayer(videoQueue[currentIdx]);
+        }
+    }
+
+    function prev() {
+        if (currentIdx > 0) {
+            currentIdx--;
+            loadPlayer(videoQueue[currentIdx]);
+        }
+    }
+
+    function updateUI() {
+        document.getElementById('currentRec').innerText = recsQueue[currentIdx] || "Menonton video...";
+        document.getElementById('statusInfo').innerText = `Status: Memutar ${currentIdx + 1} / ${videoQueue.length}`;
+    }
+</script>
+
+</body>
+</html>
